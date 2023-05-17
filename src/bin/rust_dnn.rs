@@ -14,7 +14,8 @@ fn main(){
         learning_rate
     };
 
-    model.initialize_parameters();
+    let parameters = model.initialize_parameters();
+    println!("{:?}", parameters)
     
 
 }
