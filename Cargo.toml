@@ -9,4 +9,4 @@ edition = "2021"
 ndarray = { version = "0.15.6", features = ["serde"] }
 polars = { version = "0.29.0", features = ["lazy", "ndarray"] }
 rand = "0.8.5"
-
+num-integer = "0.1.45"
