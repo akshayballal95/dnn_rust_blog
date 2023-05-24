@@ -39,6 +39,16 @@ pub fn array_from_dataframe(df: &DataFrame) -> Array2<f32> {
     df.to_ndarray::<Float32Type>().unwrap().reversed_axes()
 }
 
+trait Log {
+    fn log(&self) -> Array2<f32>;
+}
+
+impl Log for Array2<f32> {
+    fn log(&self) -> Array2<f32> {
+        self.mapv(|x| x.log(std::f32::consts::E))
+    }
+}
+
 pub fn sigmoid(z: &f32) -> f32 {
     1.0 / (1.0 + E.powf(-z))
 }
@@ -220,6 +230,15 @@ impl DeepNeuralNetwork {
         return (al, caches);
     }
 
+    pub fn cost(&self, al: &Array2<f32>, y: &Array2<f32>) -> f32 {
+        let m = y.shape()[1] as f32;
+        let cost = -(1.0 / m)
+            * (y.dot(&al.clone().reversed_axes().log())
+                + (1.0 - y).dot(&(1.0 - al).reversed_axes().log()));
+
+        return cost.sum();
+    }
+
     pub fn backward(
         &self,
         al: &Array2<f32>,
@@ -245,8 +264,7 @@ impl DeepNeuralNetwork {
 
         for l in (1..num_of_layers).rev() {
             let current_cache = caches[&l.to_string()].clone();
-            (da_prev, dw, db) =
-                linear_backward_activation(&da_prev, current_cache, "relu");
+            (da_prev, dw, db) = linear_backward_activation(&da_prev, current_cache, "relu");
 
             let weight_string = ["dW", &l.to_string()].join("").to_string();
             let bias_string = ["db", &l.to_string()].join("").to_string();
