@@ -5,6 +5,7 @@ use rand::distributions::Uniform;
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::E;
+use std::fs::OpenOptions;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -37,6 +38,20 @@ pub fn dataframe_from_csv(file_path: PathBuf) -> PolarsResult<(DataFrame, DataFr
 
 pub fn array_from_dataframe(df: &DataFrame) -> Array2<f32> {
     df.to_ndarray::<Float32Type>().unwrap().reversed_axes()
+}
+
+pub fn write_parameters_to_json_file(
+    parameters: &HashMap<String, Array2<f32>>,
+    file_path: PathBuf,
+) {
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(file_path)
+        .unwrap();
+
+    _ = serde_json::to_writer(file, parameters);
 }
 
 trait Log {
@@ -276,5 +291,68 @@ impl DeepNeuralNetwork {
         }
 
         grads
+    }
+
+    pub fn update_parameters(
+        &self,
+        params: &HashMap<String, Array2<f32>>,
+        grads: HashMap<String, Array2<f32>>,
+        learning_rate: f32,
+    ) -> HashMap<String, Array2<f32>> {
+        let mut parameters = params.clone();
+        let num_of_layers = self.layers.len() - 1;
+        for l in 1..num_of_layers + 1 {
+            let weight_string_grad = ["dW", &l.to_string()].join("").to_string();
+            let bias_string_grad = ["db", &l.to_string()].join("").to_string();
+            let weight_string = ["W", &l.to_string()].join("").to_string();
+            let bias_string = ["b", &l.to_string()].join("").to_string();
+
+            *parameters.get_mut(&weight_string).unwrap() = parameters[&weight_string].clone()
+                - (learning_rate * (grads[&weight_string_grad].clone()));
+            *parameters.get_mut(&bias_string).unwrap() = parameters[&bias_string].clone()
+                - (learning_rate * grads[&bias_string_grad].clone());
+        }
+        parameters
+    }
+
+       pub fn train_model(
+        &self,
+        x_train_data: &Array2<f32>,
+        y_train_data: &Array2<f32>,
+        mut parameters: HashMap<String, Array2<f32>>,
+        iterations: usize,
+        learning_rate: f32,
+    ) -> HashMap<String, Array2<f32>> {
+        let mut costs: Vec<f32> = vec![];
+
+        for i in 0..iterations {
+            let (al, caches) = self.forward(&x_train_data, &parameters);
+            let cost = self.cost(&al, &y_train_data);
+            let grads = self.backward(&al, &y_train_data, caches);
+            parameters = self.update_parameters(&parameters, grads.clone(), learning_rate);
+
+            if i % 100 == 0 {
+                costs.append(&mut vec![cost]);
+                println!("Epoch : {}/{}    Cost: {:?}", i, iterations, cost);
+            }
+        }
+        parameters
+    }
+
+    pub fn predict(
+        &self,
+        x_test_data: &Array2<f32>,
+        parameters: &HashMap<String, Array2<f32>>,
+    ) -> Array2<f32> {
+        let (al, _) = self.forward(&x_test_data, &parameters);
+
+        let y_hat = al.map(|x| (x > &0.5) as i32 as f32);
+        y_hat
+    }
+
+    pub fn score(&self, y_hat: &Array2<f32>, y_test_data: &Array2<f32>) -> f32 {
+        let error =
+            (y_hat - y_test_data).map(|x| x.abs()).sum() / y_test_data.shape()[1] as f32 * 100.0;
+        100.0 - error
     }
 }
